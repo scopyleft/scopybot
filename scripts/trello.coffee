@@ -7,6 +7,7 @@
 # Configuration:
 #   HUBOT_TRELLO_KEY - trello developer key
 #   HUBOT_TRELLO_TOKEN - trello developer app token
+#   HUBOT_TRELLO_BOARD_ID - trello board id
 #
 # Commands:
 #   hubot trello check - check notifications
@@ -24,15 +25,17 @@
 #   n1k0
 
 Trello = require 'node-trello'
+
 trello_key = process.env.HUBOT_TRELLO_KEY
 trello_token = process.env.HUBOT_TRELLO_TOKEN
 trello_board_id = process.env.HUBOT_TRELLO_BOARD_ID
+
+last_notif_id = undefined
+
 filter_actions =
   changeCard: (notif) ->
     if 'listAfter' of notif.data
       "#{notif.memberCreator.username} moved card `#{notif.data.card.name}` from `#{notif.data.listBefore.name}` to `#{notif.data.listAfter.name}`" + cardUrl(notif.data.card)
-    else
-      "#{notif.memberCreator.username} updated card `#{notif.data.card.name}`" + cardUrl(notif.data.card)
   commentCard: (notif) ->
     "#{notif.memberCreator.username} commented on card `#{notif.data.card.name}`: #{notif.data.text}" + cardUrl(notif.data.card)
   createdCard: (notif) ->
@@ -52,6 +55,18 @@ connect = (onConnected, onError) ->
     return onError?(e)
   onConnected?(t)
 
+dump = (data) ->
+  console.log(JSON.stringify(data, null, 4))
+
+get_notifs = (options, onComplete, onError) ->
+  connect (t) ->
+    t.get "/1/members/me/notifications", options, (err, data) ->
+      if data.length
+        last_notif_id = data[0].id
+      notifs = (filter_actions[notif.type](notif) for notif in data)
+      onComplete(notifs)
+  , onError
+
 module.exports = (robot) ->
   robot.respond /trello ping/i, (msg) ->
     connect (t) -> msg.send "trello PONG", (err) -> console.log err
@@ -61,8 +76,25 @@ module.exports = (robot) ->
       filter: Object.keys(filter_actions)
       read_filter: 'unread'
       limit: 10
-    connect (t) ->
-      t.get "/1/members/me/notifications", options, (err, data) ->
-        msg.send filter_actions[notif.type](notif) for notif in data
+      since: last_notif_id
+    get_notifs options, (notifs) ->
+      filtered = []
+      for notif in notifs
+        if notif
+          msg.send notif
     , (err) ->
       msg.send "Error: #{err}"
+
+  setInterval ->
+    options =
+      filter: Object.keys(filter_actions)
+      read_filter: 'unread'
+      limit: 10
+      since: last_notif_id
+    get_notifs options, (notifs) ->
+      for notif in notifs
+        if notif
+          robot.messageRoom "", notif
+    , (err) ->
+      msg.send "Error: #{err}"
+  , 1000 * 60 * 5
