@@ -1,1 +1,1 @@
-web: bin/hubot -n scopybot
+web: bin/hubot -n scopybot -a irc --enable-slash
