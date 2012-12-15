@@ -26,6 +26,8 @@
 
 Trello = require 'node-trello'
 
+check_interval_ms = process.env.HUBOT_TRELLO_INTERVAL ? 1000 * 60 * 5
+
 trello_key = process.env.HUBOT_TRELLO_KEY
 trello_token = process.env.HUBOT_TRELLO_TOKEN
 trello_board_id = process.env.HUBOT_TRELLO_BOARD_ID
@@ -97,4 +99,4 @@ module.exports = (robot) ->
           robot.messageRoom "", notif
     , (err) ->
       msg.send "Error: #{err}"
-  , 1000 * 60 * 5
+  , check_interval_ms
