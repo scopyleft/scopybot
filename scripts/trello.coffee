@@ -8,6 +8,7 @@
 #   HUBOT_TRELLO_KEY - trello developer key
 #   HUBOT_TRELLO_TOKEN - trello developer app token
 #   HUBOT_TRELLO_BOARD_ID - trello board id
+#   HUBOT_TRELLO_NOTIFY_ROOM - room to put notifications in
 #
 # Commands:
 #   hubot trello check - check notifications
@@ -31,6 +32,7 @@ checker = undefined
 trello_key = process.env.HUBOT_TRELLO_KEY
 trello_token = process.env.HUBOT_TRELLO_TOKEN
 trello_board_id = process.env.HUBOT_TRELLO_BOARD_ID
+trello_notify_room = process.env.HUBOT_TRELLO_NOTIFY_ROOM
 
 last_notif_id = undefined
 
@@ -51,6 +53,7 @@ connect = (onConnected, onError) ->
   console.error "missing HUBOT_TRELLO_KEY" if not trello_key
   console.error "missing HUBOT_TRELLO_TOKEN" if not trello_token
   console.error "missing HUBOT_TRELLO_BOARD_ID" if not trello_board_id
+  console.error "missing HUBOT_TRELLO_NOTIFY_ROOM" if not trello_notify_room
   try
     t = new Trello trello_key, trello_token
   catch e
@@ -84,7 +87,7 @@ init_checker = (robot) ->
     get_notifs options, (notifs) ->
       console.info "#{notifs.length} new notifications received"
       for notif in notifs
-        robot.messageRoom("", notif)
+        robot.messageRoom(trello_notify_room, notif)
     , (err) ->
       msg.send "Error: #{err}"
   , check_interval_ms
