@@ -94,7 +94,11 @@ init_checker = (robot) ->
 
 module.exports = (robot) ->
   robot.respond /trello ping/i, (msg) ->
-    connect (t) -> msg.send "trello PONG", (err) -> console.log err
+    connect (t) ->
+      msg.send "trello PONG"
+    , (err) ->
+      console.error err
+      msg.send "ERROR: " + err
 
   robot.respond /trello recent$/i, (msg) ->
     options =
