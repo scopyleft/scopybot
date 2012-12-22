@@ -65,7 +65,6 @@ dump = (data) ->
 
 get_notifs = (options, onComplete, onError) ->
   connect (t) ->
-    console.info('retrieving notifications...')
     t.get "/1/members/me/notifications", options, (err, data) ->
       if data.length
         console.info('set last_notif_id=' + data[0].id)
@@ -75,16 +74,13 @@ get_notifs = (options, onComplete, onError) ->
   , onError
 
 init_checker = (robot) ->
-  console.info "set interval check to #{check_interval_ms}"
   checker = setInterval ->
-    console.info "checking for new notifications..."
     options =
       filter: Object.keys(filter_actions)
       read_filter: 'unread'
       limit: 10
       since: last_notif_id
     get_notifs options, (notifs) ->
-      console.info "#{notifs.length} new notifications received"
       for notif in notifs
         robot.messageRoom(config.notify_room, notif)
     , (err) ->
