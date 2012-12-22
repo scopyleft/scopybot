@@ -16,10 +16,7 @@
 get_fortune = (robot, onSuccess, onError) ->
   robot.http('http://www.fortunefortoday.com/getfortuneonly.php')
      .get() (err, res, body) ->
-        if err
-          onError(err, res)
-        else
-          onSuccess(body, res)
+        if err then onError(err, res) else onSuccess(body, res)
 
 init_checker = (robot) ->
   checker = setInterval ->
