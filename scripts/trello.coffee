@@ -28,21 +28,32 @@
 Trello = require 'node-trello'
 
 check_interval_ms = process.env.HUBOT_TRELLO_INTERVAL ? 1000 * 60 * 5
+
 checker = undefined
+
 config =
   key: process.env.HUBOT_TRELLO_KEY
   token: process.env.HUBOT_TRELLO_TOKEN
   board_id: process.env.HUBOT_TRELLO_BOARD_ID
   notify_room: process.env.HUBOT_TRELLO_NOTIFY_ROOM
+
+format = (str) ->
+  str.replace('/\n/g', ' ').replace(/\s{2,}/g, " ").trim()
+
 filter_actions =
   changeCard: (notif) ->
     if 'listAfter' not of notif.data
       return
-    "#{notif.memberCreator.username} moved card `#{notif.data.card.name}` from `#{notif.data.listBefore.name}` to `#{notif.data.listAfter.name}` - #{cardUrl(notif.data.card)}"
+    format """#{notif.memberCreator.username} moved card `#{notif.data.card.name}`
+              from `#{notif.data.listBefore.name}` to `#{notif.data.listAfter.name}`
+              - #{cardUrl(notif.data.card)}"""
   commentCard: (notif) ->
-    "#{notif.memberCreator.username} commented on card `#{notif.data.card.name}`: #{notif.data.text} - #{cardUrl(notif.data.card)}"
+    format """#{notif.memberCreator.username} commented on card `#{notif.data.card.name}`:
+              #{notif.data.text} - #{cardUrl(notif.data.card)}"""
   createdCard: (notif) ->
-    "#{notif.memberCreator.username} created card `#{notif.data.card.name}` - #{cardUrl(notif.data.card)}"
+    format """#{notif.memberCreator.username} created card `#{notif.data.card.name}`
+              - #{cardUrl(notif.data.card)}"""
+
 last_notif_id = undefined
 
 cardUrl = (card) ->
@@ -63,11 +74,12 @@ connect = (onConnected, onError) ->
 dump = (data) ->
   console.log(JSON.stringify(data, null, 4))
 
-get_notifs = (options, onComplete, onError) ->
+get_notifs = (query, onComplete, onError) ->
   connect (t) ->
-    t.get "/1/members/me/notifications", options, (err, data) ->
-      if data.length
-        console.info('set last_notif_id=' + data[0].id)
+    t.get "/1/members/me/notifications", query, (err, data) ->
+      if err
+        return onError err
+      if data
         last_notif_id = data[0].id
       raw_notifs = (filter_actions[notif.type](notif) for notif in data)
       onComplete(notif for notif in raw_notifs when notif isnt undefined)
@@ -75,20 +87,20 @@ get_notifs = (options, onComplete, onError) ->
 
 init_checker = (robot) ->
   checker = setInterval ->
-    options =
+    query =
       filter: Object.keys(filter_actions)
       read_filter: 'unread'
       limit: 10
       since: last_notif_id
-    get_notifs options, (notifs) ->
+    get_notifs query, (notifs) ->
       for notif in notifs
         robot.messageRoom(config.notify_room, notif)
     , (err) ->
-      msg.send "Error: #{err}"
+      robot.send "Error: #{err}"
   , check_interval_ms
 
 module.exports = (robot) ->
-  robot.respond /trello ping/i, (msg) ->
+  robot.respond /trello ping$/i, (msg) ->
     connect (t) ->
       msg.send "trello PONG"
     , (err) ->
@@ -96,15 +108,17 @@ module.exports = (robot) ->
       msg.send "ERROR: " + err
 
   robot.respond /trello recent$/i, (msg) ->
-    options =
+    query =
       filter: Object.keys(filter_actions)
       read_filter: 'unread'
       limit: 10
       since: last_notif_id
-    get_notifs options, (notifs) ->
+    get_notifs query, (notifs) ->
       for notif in notifs
         msg.send(notif)
     , (err) ->
       msg.send "Error: #{err}"
 
   init_checker(robot)
+
+  console.log('plop')
