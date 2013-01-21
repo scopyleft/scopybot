@@ -38,7 +38,7 @@ config =
   notify_room: process.env.HUBOT_TRELLO_NOTIFY_ROOM
 
 format = (str) ->
-  str.replace('/\n/g', ' ').replace(/\s{2,}/g, " ").trim()
+  str.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim()
 
 filter_actions =
   changeCard: (notif) ->
@@ -79,7 +79,7 @@ get_notifs = (query, onComplete, onError) ->
     t.get "/1/members/me/notifications", query, (err, data) ->
       if err
         return onError err
-      if data
+      if data and data[0] and data[0].id
         last_notif_id = data[0].id
       raw_notifs = (filter_actions[notif.type](notif) for notif in data)
       onComplete(notif for notif in raw_notifs when notif isnt undefined)
@@ -120,5 +120,3 @@ module.exports = (robot) ->
       msg.send "Error: #{err}"
 
   init_checker(robot)
-
-  console.log('plop')
