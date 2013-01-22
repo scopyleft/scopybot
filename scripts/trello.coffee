@@ -25,9 +25,7 @@
 # Author:
 #   n1k0
 
-#Redis  = require 'redis'
 Trello = require 'node-trello'
-#Url    = require 'url'
 
 check_interval_ms = process.env.HUBOT_TRELLO_INTERVAL ? 1000 * 60 * 5
 
@@ -89,34 +87,42 @@ get_notifs = (query, onComplete, onError) ->
       onComplete(notif for notif in raw_notifs when notif isnt undefined)
   , onError
 
-init_checker = (robot) ->
-  checker = setInterval ->
-    query =
-      filter: Object.keys(filter_actions)
-      read_filter: 'unread'
-      limit: 10
-      since: last_notif_id
-    get_notifs query, (notifs) ->
-      for notif in notifs
-        robot.messageRoom(config.notify_room, notif)
-    , (err) ->
-      robot.send "Error: #{err}"
+init_checkers = (robot) ->
+  overflow_checker = setInterval ->
+    check_overflow '50879d153736d86435004cba', (messages) ->
+      for message in messages
+        robot.messageRoom(config.notify_room, message)
   , check_interval_ms
 
 board_info = (board, sep) ->
   sep ?= "\n -> "
   "Board: #{board.name}:#{sep}" + ("#{list.name}" for list in board.lists).join(sep)
 
-module.exports = (robot) ->
-  # redis_info   = Url.parse process.env.REDISTOGO_URL || 'redis://localhost:6379'
-  # client = Redis.createClient(redis_info.port, redis_info.hostname)
+check_overflow = (board_id, cb) ->
+  connect (t) ->
+    t.get "/1/boards/#{board_id}/lists", cards: 'open', (err, lists) ->
+      if err then return robot.send "Error: #{err}"
+      messages = []
+      for list in lists
+        match = /\((\d+)\)$/.exec list.name
+        if match
+          max_cards = parseInt match[1], 10
+          if list.cards.length > max_cards
+            messages.push format """hep, ça déborde dans \"#{list.name}\":
+                                    #{list.cards.length}/#{max_cards}
+                                    https://trello.com/board/quotidien/#{board_id}"""
+      cb messages
 
+module.exports = (robot) ->
   robot.respond /trello boards$/i, (msg) ->
     connect (t) ->
       t.get "/1/organizations/scopyleft/boards", lists: 'open', (err, boards) ->
-        if err
-          return msg.send "Error: #{err}"
+        if err then return robot.send "Error: #{err}"
         msg.send board_info(board) for board in boards
+
+  robot.respond /trello board check (\w+)$/i, (msg) ->
+    check_overflow msg.match[1], (messages) ->
+      msg.send(message) for message in messages
 
   robot.respond /trello ping$/i, (msg) ->
     connect (t) ->
@@ -136,4 +142,4 @@ module.exports = (robot) ->
     , (err) ->
       msg.send "Error: #{err}"
 
-  init_checker(robot)
+  init_checkers(robot)
