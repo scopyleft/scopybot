@@ -110,7 +110,7 @@ check_overflow = (board_id, cb) ->
           if list.cards.length > max_cards
             messages.push format """hep, ça déborde dans \"#{list.name}\":
                                     #{list.cards.length}/#{max_cards}
-                                    https://trello.com/board/quotidien/#{board_id}"""
+                                    https://trello.com/board/#{board_id}"""
       cb messages
 
 module.exports = (robot) ->
