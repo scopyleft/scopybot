@@ -19,7 +19,8 @@
     "hubot-irc": ">= 0.1.4",
     "hubot-scripts": ">= 2.4.1",
     "optparse": ">= 1.0.3",
-    "node-trello": ">= 0.1.3"
+    "node-trello": ">= 0.1.3",
+    "redis": ">= 0.8.2"
   },
 
   "engines": {

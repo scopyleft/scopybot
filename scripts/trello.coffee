@@ -25,7 +25,9 @@
 # Author:
 #   n1k0
 
+#Redis  = require 'redis'
 Trello = require 'node-trello'
+#Url    = require 'url'
 
 check_interval_ms = process.env.HUBOT_TRELLO_INTERVAL ? 1000 * 60 * 5
 
@@ -36,6 +38,8 @@ config =
   token: process.env.HUBOT_TRELLO_TOKEN
   board_id: process.env.HUBOT_TRELLO_BOARD_ID
   notify_room: process.env.HUBOT_TRELLO_NOTIFY_ROOM
+
+current_board = undefined
 
 format = (str) ->
   str.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim()
@@ -99,7 +103,21 @@ init_checker = (robot) ->
       robot.send "Error: #{err}"
   , check_interval_ms
 
+board_info = (board, sep) ->
+  sep ?= "\n -> "
+  "Board: #{board.name}:#{sep}" + ("#{list.name}" for list in board.lists).join(sep)
+
 module.exports = (robot) ->
+  # redis_info   = Url.parse process.env.REDISTOGO_URL || 'redis://localhost:6379'
+  # client = Redis.createClient(redis_info.port, redis_info.hostname)
+
+  robot.respond /trello boards$/i, (msg) ->
+    connect (t) ->
+      t.get "/1/organizations/scopyleft/boards", lists: 'open', (err, boards) ->
+        if err
+          return msg.send "Error: #{err}"
+        msg.send board_info(board) for board in boards
+
   robot.respond /trello ping$/i, (msg) ->
     connect (t) ->
       msg.send "trello PONG"
@@ -114,8 +132,7 @@ module.exports = (robot) ->
       limit: 10
       since: last_notif_id
     get_notifs query, (notifs) ->
-      for notif in notifs
-        msg.send(notif)
+      msg.send(notif) for notif in notifs
     , (err) ->
       msg.send "Error: #{err}"
 

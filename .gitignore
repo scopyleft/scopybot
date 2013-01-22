@@ -1,3 +1,4 @@
+bin/ultra-repl
 env
 node_modules
 sample-data.json
