@@ -94,6 +94,12 @@ init_checkers = (robot) ->
         robot.messageRoom(config.notify_room, message)
   , check_interval_ms
 
+parse_max_cards = (list) ->
+  match = /\((\d+)\)$/.exec list.name
+  if match
+    max_cards = parseInt match[1], 10
+  max_cards
+
 board_info = (board, sep) ->
   sep ?= "\n -> "
   "Board: #{board.name}:#{sep}" + ("#{list.name}" for list in board.lists).join(sep)
@@ -104,13 +110,11 @@ check_overflow = (board_id, cb) ->
       if err then return robot.send "Error: #{err}"
       messages = []
       for list in lists
-        match = /\((\d+)\)$/.exec list.name
-        if match
-          max_cards = parseInt match[1], 10
-          if list.cards.length > max_cards
-            messages.push format """hep, ça déborde dans \"#{list.name}\":
-                                    #{list.cards.length}/#{max_cards}
-                                    https://trello.com/board/#{board_id}"""
+        max_cards = parse_max_cards(list)
+        if list.cards.length > max_cards
+          messages.push format """hep, ça déborde dans \"#{list.name}\":
+                                  #{list.cards.length}/#{max_cards}
+                                  https://trello.com/board/#{board_id}"""
       cb messages
 
 module.exports = (robot) ->
