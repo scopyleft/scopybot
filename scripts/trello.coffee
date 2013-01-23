@@ -25,6 +25,7 @@
 # Author:
 #   n1k0
 
+moment = require 'moment'
 Trello = require 'node-trello'
 
 check_interval_ms = process.env.HUBOT_TRELLO_INTERVAL ? 1000 * 60 * 5
@@ -34,6 +35,7 @@ checker = undefined
 config =
   key: process.env.HUBOT_TRELLO_KEY
   token: process.env.HUBOT_TRELLO_TOKEN
+  archive_days: process.env.HUBOT_TRELLO_ARCHIVE_DAYS || 15
   board_id: process.env.HUBOT_TRELLO_BOARD_ID
   notify_room: process.env.HUBOT_TRELLO_NOTIFY_ROOM
 
@@ -76,6 +78,11 @@ connect = (onConnected, onError) ->
 dump = (data) ->
   console.log(JSON.stringify(data, null, 4))
 
+get_boards = (cb, onError) ->
+  connect (t) ->
+    t.get "/1/organizations/scopyleft/boards", lists: 'open', filter: 'pinned', (err, boards) ->
+      cb(err, boards)
+
 get_notifs = (query, onComplete, onError) ->
   connect (t) ->
     t.get "/1/members/me/notifications", query, (err, data) ->
@@ -89,10 +96,18 @@ get_notifs = (query, onComplete, onError) ->
 
 init_checkers = (robot) ->
   overflow_checker = setInterval ->
-    check_overflow '50879d153736d86435004cba', (messages) ->
+    check_overflow (messages) ->
       for message in messages
         robot.messageRoom(config.notify_room, message)
   , check_interval_ms
+
+  archive_checker = setInterval ->
+    check_archive (messages) ->
+      for message in messages
+        robot.messageRoom(config.notify_room, message)
+    , (err) ->
+      console.error err
+      msg.send "ERROR: " + err
 
 parse_max_cards = (list) ->
   match = /\((\d+)\)$/.exec list.name
@@ -104,29 +119,68 @@ board_info = (board, sep) ->
   sep ?= "\n -> "
   "Board: #{board.name}:#{sep}" + ("#{list.name}" for list in board.lists).join(sep)
 
-check_overflow = (board_id, cb) ->
+archive_card = (card, onError) ->
   connect (t) ->
-    t.get "/1/boards/#{board_id}/lists", cards: 'open', (err, lists) ->
-      if err then return robot.send "Error: #{err}"
-      messages = []
-      for list in lists
-        max_cards = parse_max_cards(list)
-        if list.cards.length > max_cards
-          messages.push format """hep, ça déborde dans \"#{list.name}\":
-                                  #{list.cards.length}/#{max_cards}
-                                  https://trello.com/board/#{board_id}"""
-      cb messages
+    t.put "/1/cards/#{card.id}/closed", value: "true", (err) ->
+      if err then return onError?(err)
+      console.info "archived #{card.name}"
+
+check_archive = (cb, onError) ->
+  get_boards (err, boards) ->
+    if err then return onError?(err)
+    boards.forEach (board) ->
+      connect (t) ->
+        t.get "/1/boards/#{board.id}/lists", cards: 'open', (err, lists) ->
+          messages = []
+          if err then return onError?(err)
+          lists.forEach (list) ->
+            if list.name != 'Terminé' then return
+            list.cards.forEach (card) ->
+              if /^Lisez-moi/.test(card.name) or card.closed then return
+              expiry = moment(card.dateLastActivity).add('days', config.archive_days)
+              if expiry < moment()
+                archive_card card, (err) -> msg.send "Error: #{err}"
+                messages.push format """card #{board.name} > #{list.name} > #{card.name}
+                                        is more than #{config.archive_days} days old, archived
+                                        #{card.shortUrl}"""
+          cb(messages)
+
+check_overflow = (board_id, cb, onError) ->
+  get_boards (err, boards) ->
+    if err then return onError?(err)
+    boards.forEach (board) ->
+      connect (t) ->
+        t.get "/1/boards/#{board.id}/lists", cards: 'open', (err, lists) ->
+          if err then return onError?(err)
+          messages = []
+          lists.forEach (list) ->
+            max_cards = parse_max_cards(list)
+            if list.cards.length > max_cards
+              messages.push format """task overflow detected in \"#{list.name}\":
+                                      #{list.cards.length}/#{max_cards}
+                                      https://trello.com/board/#{board_id}"""
+          cb(messages)
 
 module.exports = (robot) ->
   robot.respond /trello boards$/i, (msg) ->
     connect (t) ->
       t.get "/1/organizations/scopyleft/boards", lists: 'open', (err, boards) ->
-        if err then return robot.send "Error: #{err}"
+        if err then return onError?(err)
         msg.send board_info(board) for board in boards
 
-  robot.respond /trello board check (\w+)$/i, (msg) ->
-    check_overflow msg.match[1], (messages) ->
+  robot.respond /trello check overflow$/i, (msg) ->
+    check_overflow (messages) ->
       msg.send(message) for message in messages
+    , (err) ->
+      console.error err
+      msg.send "ERROR: " + err
+
+  robot.respond /trello check archive$/i, (msg) ->
+    check_archive (messages) ->
+      msg.send(message) for message in messages
+    , (err) ->
+      console.error err
+      msg.send "ERROR: " + err
 
   robot.respond /trello ping$/i, (msg) ->
     connect (t) ->
