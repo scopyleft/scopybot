@@ -108,6 +108,7 @@ init_checkers = (robot) ->
     , (err) ->
       console.error err
       msg.send "ERROR: " + err
+  , check_interval_ms
 
 parse_max_cards = (list) ->
   match = /\((\d+)\)$/.exec list.name
