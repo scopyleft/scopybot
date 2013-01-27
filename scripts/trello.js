@@ -133,34 +133,41 @@ function boardInfo(board, sep) {
 
 function archiveCard(card, cb, onError) {
     connect(function(t) {
-        t.put(format("/1/cards/%s/closed", card.id), {
-            value: "true"
-        }, function(err) {
+        t.put(format("/1/cards/%s/closed", card.id), { value: "true" }, function(err) {
             if (err) return handleError(err, onError);
-            cb(card);
+            t.post(format("/1/cards/%s/actions/comments", card.id), {
+                text: format("This card has not been updated since %d days, archived.",
+                             config.archiveDays)
+            }, function(err) {
+                if (err) return handleError(err, onError);
+                cb(card);
+            })
         });
-    });
+    }, onError);
 }
 
 function archiveListsCards(lists, board, onError) {
-    return lists.map(function(list) {
-        if (list.name !== 'Terminé') return;
-        list.cards.forEach(function(card) {
-            if (/^Lisez-moi/.test(card.name) || card.closed) return;
-            var expiry = moment(card.dateLastActivity).add('days', config.archiveDays);
-            if (expiry < moment()) {
-                archiveCard(card, function(card) {
-                    console.info("archived " + card.name);
-                }, onError);
-                return format("card %s > %s > %s is more than %d days old, archived %s",
-                              board.name,
-                              list.name,
-                              card.name,
-                              config.archiveDays,
-                              card.shortUrl);
-            }
+    var messages = [];
+    var filteredLists = lists.filter(function(list) {
+        return list.name === 'Terminé';
+    });
+    filteredLists.forEach(function(list) {
+        list.cards.filter(function(card) {
+            return !(/^Lisez-moi/.test(card.name)) && !card.closed;
+        }).forEach(function(card) {
+            if (moment(card.dateLastActivity).add('days', config.archiveDays) >= moment()) return;
+            archiveCard(card, function(card) {
+                console.info("archived " + card.name);
+            }, onError);
+            messages.push(format("card %s > %s > %s is more than %d days old, archived %s",
+                                 board.name,
+                                 list.name,
+                                 card.name,
+                                 config.archiveDays,
+                                 card.shortUrl));
         });
-    }).filter(function(message) {
+    });
+    return messages.filter(function(message) {
         return message !== undefined;
     });
 }
@@ -176,7 +183,7 @@ function checkArchive(cb, onError) {
                     if (err) return handleError(err, onError);
                     return cb(archiveListsCards(lists, board, onError));
                 });
-            });
+            }, onError);
         });
     });
 }
@@ -202,7 +209,7 @@ function checkOverflow(cb, onError) {
                         return message !== undefined;
                     }));
                 });
-            });
+            }, onError);
         });
     });
 }
