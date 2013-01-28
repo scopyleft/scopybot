@@ -55,30 +55,24 @@ var util   = require('util')
 
 function defaultErrorHandler(error) {
     console.error(error);
-    if (scopybot) {
-        scopybot.messageRoom(config.notifyRoom, "ERROR: " + error)
-    }
+    if (scopybot) scopybot.messageRoom(config.notifyRoom, "ERROR: " + error);
 }
 
 function handleError(error, onError) {
     console.error(error);
-    if (typeof onError === "function") {
-        return onError(error);
-    }
+    if (typeof onError === "function") return onError(error);
     defaultErrorHandler(error);
 }
 
-function connect(onConnected, onError) {
-    var t;
+function connect(onError) {
     if (!config.key) console.error("missing HUBOT_TRELLO_KEY");
     if (!config.token) console.error("missing HUBOT_TRELLO_TOKEN");
     if (!config.notifyRoom) console.error("missing HUBOT_TRELLO_NOTIFY_ROOM");
     try {
-        t = new Trello(config.key, config.token);
+        return new Trello(config.key, config.token);
     } catch (err) {
         return handleError(err, onError);
     }
-    if (typeof onConnected === "function") onConnected(t);
 }
 
 function dump(data) {
@@ -86,31 +80,27 @@ function dump(data) {
 }
 
 function getBoards(cb, onError) {
-    connect(function(t) {
-        t.get("/1/organizations/scopyleft/boards", {
-            lists: 'open',
-            filter: 'pinned'
-        }, function(err, boards) {
-            if (err) return handleError(err, onError);
-            cb(err, boards);
-        });
+    connect().get("/1/organizations/scopyleft/boards", {
+        lists: 'open',
+        filter: 'pinned'
+    }, function(err, boards) {
+        if (err) return handleError(err, onError);
+        cb(err, boards);
     });
 }
 
-function getNotifs(query, onComplete, onError) {
-    connect(function(t) {
-        t.get("/1/members/me/notifications", query, function(err, notifications) {
-            if (err) return handleError(err, onError);
-            try {
-                lastNotifId = notifications[0].id;
-            } catch (e) {}
-            onComplete(notifications.map(function(notification) {
-                return filterActions[notification.type](notification);
-            }).filter(function(notification) {
-                return notification !== undefined;
-            }));
-        });
-    }, onError);
+function getNotifs(query, cb, onError) {
+    connect().get("/1/members/me/notifications", query, function(err, notifications) {
+        if (err) return handleError(err, onError);
+        try {
+            lastNotifId = notifications[0].id;
+        } catch (e) {}
+        cb(notifications.map(function(notification) {
+            return filterActions[notification.type](notification);
+        }).filter(function(notification) {
+            return notification !== undefined;
+        }));
+    });
 }
 
 function initCheckers(robot) {
@@ -148,18 +138,19 @@ function boardInfo(board, sep) {
 }
 
 function archiveCard(card, cb, onError) {
-    connect(function(t) {
-        t.put(format("/1/cards/%s/closed", card.id), { value: "true" }, function(err) {
+    var t = connect();
+    t.put(format("/1/cards/%s/closed", card.id), {
+        value: "true"
+    }, function(err) {
+        if (err) return handleError(err, onError);
+        t.post(format("/1/cards/%s/actions/comments", card.id), {
+            text: format("This card has not been updated since %d days, archived.",
+                         config.archiveDays)
+        }, function(err) {
             if (err) return handleError(err, onError);
-            t.post(format("/1/cards/%s/actions/comments", card.id), {
-                text: format("This card has not been updated since %d days, archived.",
-                             config.archiveDays)
-            }, function(err) {
-                if (err) return handleError(err, onError);
-                cb(card);
-            })
-        });
-    }, onError);
+            cb(card);
+        })
+    });
 }
 
 function archiveListsCards(lists, board, onError) {
@@ -192,14 +183,12 @@ function checkArchive(cb, onError) {
     return getBoards(function(err, boards) {
         if (err) return handleError(err, onError);
         boards.forEach(function(board) {
-            connect(function(t) {
-                t.get(format("/1/boards/%s/lists", board.id), {
-                    cards: 'open'
-                }, function(err, lists) {
-                    if (err) return handleError(err, onError);
-                    return cb(archiveListsCards(lists, board, onError));
-                });
-            }, onError);
+            connect().get(format("/1/boards/%s/lists", board.id), {
+                cards: 'open'
+            }, function(err, lists) {
+                if (err) return handleError(err, onError);
+                return cb(archiveListsCards(lists, board, onError));
+            });
         });
     });
 }
@@ -208,24 +197,25 @@ function checkOverflow(cb, onError) {
     getBoards(function(err, boards) {
         if (err) return handleError(err, onError);
         boards.forEach(function(board) {
-            connect(function(t) {
-                t.get(format("/1/boards/%s/lists", board.id), { cards: 'open' }, function(err, lists) {
-                    if (err) return handleError(err, onError);
-                    cb(lists.map(function(list) {
-                        var maxCards = parseMaxCards(list);
-                        if (!maxCards) return;
-                        if (list.cards.length <= maxCards) return;
-                        return format("task overflow detected in %s > %s: %d/%d https://trello.com/board/%s",
-                                      board.name,
-                                      list.name,
-                                      list.cards.length,
-                                      maxCards,
-                                      board.id);
-                    }).filter(function(message) {
-                        return message !== undefined;
-                    }));
+            connect().get(format("/1/boards/%s/lists", board.id), {
+                cards: 'open'
+            }, function(err, lists) {
+                if (err) return handleError(err, onError);
+                var messages = lists.map(function(list) {
+                    var maxCards = parseMaxCards(list);
+                    if (!maxCards) return;
+                    if (list.cards.length <= maxCards) return;
+                    return format("task overflow detected in %s > %s: %d/%d https://trello.com/board/%s",
+                                  board.name,
+                                  list.name,
+                                  list.cards.length,
+                                  maxCards,
+                                  board.id);
+                }).filter(function(message) {
+                    return message !== undefined;
                 });
-            }, onError);
+                cb(messages);
+            });
         });
     });
 }
@@ -234,14 +224,12 @@ module.exports = function(robot) {
     scopybot = robot;
 
     robot.respond(/trello boards$/i, function(msg) {
-        connect(function(t) {
-            t.get("/1/organizations/scopyleft/boards", {
-                lists: 'open'
-            }, function(err, boards) {
-                if (err) return handleError(err);
-                boards.forEach(function(board) {
-                    msg.send(boardInfo(board));
-                });
+        connect().get("/1/organizations/scopyleft/boards", {
+            lists: 'open'
+        }, function(err, boards) {
+            if (err) return handleError(err);
+            boards.forEach(function(board) {
+                msg.send(boardInfo(board));
             });
         });
     });
@@ -263,9 +251,8 @@ module.exports = function(robot) {
     });
 
     robot.respond(/trello ping$/i, function(msg) {
-        connect(function(t) {
-            msg.send("trello PONG");
-        });
+        connect();
+        msg.send("trello PONG");
     });
 
     robot.respond(/trello recent$/i, function(msg) {
