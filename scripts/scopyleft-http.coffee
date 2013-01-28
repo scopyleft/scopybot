@@ -1,3 +1,15 @@
+# Description:
+#   Homepage redirect
+#
+# Dependencies:
+#   None
+#
+# Configuration:
+#   None
+#
+# Commands:
+#   None
+
 module.exports = (robot) ->
   robot.router.get "/", (req, res) ->
     res.statusCode = 302 # we never know

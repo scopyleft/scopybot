@@ -1,3 +1,19 @@
+// Description:
+//   Performs checks in your Trello boards, lists and cards
+//
+// Dependencies:
+//   node-trello
+//
+// Configuration:
+//   HUBOT_TRELLO_KEY: your trello API key
+//   HUBOT_TRELLO_TOKEN: your trello API token
+//   HUBOT_TRELLO_INTERVAL: check interval in ms
+//   HUBOT_TRELLO_NOTIFY_ROOM: room to send notifications to
+//
+// Commands:
+//   trello check overflow
+//   trello check archive
+
 /*global module process*/
 var util   = require('util')
   , format = util.format
