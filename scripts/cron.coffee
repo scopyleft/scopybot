@@ -1,0 +1,1 @@
+../node_modules/hubot-cron/src/scripts/cron.coffee
