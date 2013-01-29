@@ -15,6 +15,7 @@
   },
 
   "dependencies": {
+    "cron": ">= 1.0.1",
     "hubot": ">= 2.4.5",
     "hubot-irc": ">= 0.1.4",
     "optparse": ">= 1.0.3",
