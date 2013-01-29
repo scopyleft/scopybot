@@ -193,29 +193,33 @@ function checkArchive(cb, onError) {
     });
 }
 
+function checkBoardOverflow(board, cb, onError) {
+    connect().get(format("/1/boards/%s/lists", board.id), {
+        cards: 'open'
+    }, function(err, lists) {
+        if (err) return handleError(err, onError);
+        var messages = lists.map(function(list) {
+            var maxCards = parseMaxCards(list);
+            if (!maxCards) return;
+            if (list.cards.length <= maxCards) return;
+            return format("task overflow detected in %s > %s: %d/%d https://trello.com/board/%s",
+                          board.name,
+                          list.name,
+                          list.cards.length,
+                          maxCards,
+                          board.id);
+        }).filter(function(message) {
+            return message !== undefined;
+        });
+        cb(messages);
+    });
+}
+
 function checkOverflow(cb, onError) {
     getBoards(function(err, boards) {
         if (err) return handleError(err, onError);
         boards.forEach(function(board) {
-            connect().get(format("/1/boards/%s/lists", board.id), {
-                cards: 'open'
-            }, function(err, lists) {
-                if (err) return handleError(err, onError);
-                var messages = lists.map(function(list) {
-                    var maxCards = parseMaxCards(list);
-                    if (!maxCards) return;
-                    if (list.cards.length <= maxCards) return;
-                    return format("task overflow detected in %s > %s: %d/%d https://trello.com/board/%s",
-                                  board.name,
-                                  list.name,
-                                  list.cards.length,
-                                  maxCards,
-                                  board.id);
-                }).filter(function(message) {
-                    return message !== undefined;
-                });
-                cb(messages);
-            });
+            checkBoardOverflow(board, cb, onError);
         });
     });
 }
