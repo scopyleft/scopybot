@@ -9,23 +9,35 @@
 //
 // Commands:
 //   mood set "<sunny|cloudy|rainy|stormy>"
-//   mood get <nickname>
+//   mood of <(nickname)|me>
+//   mood today
+//   mood yesterday
 
 /*global module process*/
 var bot
-  , format   = require('util').format
-  , moods    = "sunny|cloudy|rainy|stormy".split('|')
-  , redisKey = "moods"
-  , Url      = require("url")
-  , Redis    = require("redis");
+  , format     = require('util').format
+  , validMoods = "sunny|cloudy|rainy|stormy".split('|')
+  , bars       = "▇▅▃▂".split('')
+  , redisKey   = "moods"
+  , Url        = require("url")
+  , Redis      = require("redis");
 
+
+function datetime(date) {
+    return date.toISOString().split('T')[0];
+}
+
+function daysBefore(days, from) {
+    from = from || new Date();
+    return new Date(from - (86400 * 1000 * days));
+}
 
 function today() {
-    return new Date().toISOString().split('T')[0];
+    return datetime(new Date());
 }
 
 function yesterday() {
-    return new Date(new Date() - (86400 * 1000)).toISOString().split('T')[0];
+    return datetime(daysBefore(1));
 }
 
 function getMoods(cb) {
@@ -63,7 +75,7 @@ function storeMood(user, mood, cb) {
     moodExists.call(client, date, user, function(err, exists) {
         if (err) throw err;
         if (exists) {
-            return bot.logger.info(format('mood already stored for %s on %s', user, date));
+            return bot.send(format('mood already stored for %s on %s', user, date));
         }
         bot.logger.info('storing mood entry: ' + entry);
         client.rpush(redisKey, entry, cb);
@@ -91,9 +103,9 @@ module.exports = function(robot) {
     robot.respond(/mood set (\w+)$/i, function(msg) {
         var user = msg.message.user && msg.message.user.name || "anon"
          ,  mood = msg.match[1].toLowerCase();
-        if (moods.indexOf(mood) === -1) {
+        if (validMoods.indexOf(mood) === -1) {
             return msg.send(format('Invalid mood %s; valid values are %s',
-                                   mood, moods.join(', ')));
+                                   mood, validMoods.join(', ')));
         }
         storeMood.call(client, user, mood, function(err, reply) {
             if (err) throw err;
@@ -118,7 +130,6 @@ module.exports = function(robot) {
 
     robot.respond(/mood yesterday$/i, function(msg) {
         msg.send(format("Yesterday's moods:"));
-        console.log(yesterday());
         getMoods.call(client, function(err, moods) {
             var yesterdayMoods = moods.filter(function(mood) {
                 return mood.date === yesterday();
@@ -129,6 +140,25 @@ module.exports = function(robot) {
             yesterdayMoods.forEach(function(mood) {
                 msg.send(format('- %s was in a %s mood', mood.user, mood.mood));
             });
+        });
+    });
+
+    robot.respond(/mood week (of|for) (.*)$/i, function(msg) {
+        var user = msg.match[2];
+        if (user.toLowerCase().trim() === "me") {
+            user = msg.message.user && msg.message.user.name;
+        }
+        getMoods.call(client, function(err, moods) {
+            var graph = ""
+              , weekMoods = moods.filter(function(mood) {
+                return mood.user === user && new Date(mood.date) >= daysBefore(7);
+            });
+            if (!weekMoods || !weekMoods.length) {
+                return msg.send(format('No mood entry for %s in the last 7 days.', user));
+            }
+            msg.send(weekMoods.map(function(mood) {
+                return bars[validMoods.indexOf(mood.mood)];
+            }).join(''));
         });
     });
 
