@@ -54,20 +54,20 @@ var util   = require('util')
 };
 
 function defaultErrorHandler(error) {
-    console.error(error);
-    if (scopybot) scopybot.messageRoom(config.notifyRoom, "ERROR: " + error);
+    scopybot.logger.error(error);
+    scopybot.messageRoom(config.notifyRoom, "ERROR: " + error);
 }
 
 function handleError(error, onError) {
-    console.error(error);
+    scopybot.logger.error(error);
     if (typeof onError === "function") return onError(error);
     defaultErrorHandler(error);
 }
 
 function connect(onError) {
-    if (!config.key) console.error("missing HUBOT_TRELLO_KEY");
-    if (!config.token) console.error("missing HUBOT_TRELLO_TOKEN");
-    if (!config.notifyRoom) console.error("missing HUBOT_TRELLO_NOTIFY_ROOM");
+    if (!config.key) scopybot.logger.error("missing HUBOT_TRELLO_KEY");
+    if (!config.token) scopybot.logger.error("missing HUBOT_TRELLO_TOKEN");
+    if (!config.notifyRoom) scopybot.logger.error("missing HUBOT_TRELLO_NOTIFY_ROOM");
     try {
         return new Trello(config.key, config.token);
     } catch (err) {
@@ -164,7 +164,7 @@ function archiveListsCards(lists, board, onError) {
         }).forEach(function(card) {
             if (moment(card.dateLastActivity).add('days', config.archiveDays) >= moment()) return;
             archiveCard(card, function(card) {
-                console.info("archived " + card.name);
+                scopybot.logger.info("archived " + card.name);
             }, onError);
             messages.push(format("card %s > %s > %s is more than %d days old, archived %s",
                                  board.name,
